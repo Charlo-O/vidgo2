@@ -23,6 +23,7 @@ from . import views
 
 urlpatterns = [
     path('', include("video.urls"), name='video'),  # 将根路径 '/' 映射到 video 应用的 index 视图
+    path('api/health/', views.health_check, name='health_check'),
     path('api/auth/', include("accounts.urls"), name='accounts'),  # User authentication endpoints
        # 前端静态资源
     re_path(r'^assets/(?P<path>.*)$', views.frontend_assets, name='frontend_assets'),

@@ -32,10 +32,12 @@ coverage
 node_modules/
 
 csrf_cookies.txt
-package-lock.json
-package.json
 snapshot_no_black_block.png
 src/assets/flute_icon.png
 src/assets/flute_icon_black.png
 src/shims-hls.d.ts
 test.html
+
+# Electron build outputs
+dist-electron
+release

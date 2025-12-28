@@ -14,5 +14,9 @@ ENGINES={
     "openai":{
         "normal": "gpt-4o",
         "thinking": "o4-mini",
+    },
+    "modelscope":{
+        "normal": "Qwen/Qwen2.5-72B-Instruct",
+        "thinking": "Qwen/QwQ-32B",
     }
 }

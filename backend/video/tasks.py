@@ -571,6 +571,10 @@ download_status = defaultdict(
         "url": "",
         "cid": "",
         "bvid": "",
+        "output_filename": "",
+        "thumbnail_filename": "",
+        "imported_video_id": None,
+        "error_message": "",
     }
 )
 
@@ -726,7 +730,7 @@ def download_youtube_video(task_id: str):
         # YouTube 的 yt-dlp 通常会自动合并视频和音频
         # 所以我们跳过单独的音频下载和合并步骤
         dl_set(task_id, "audio", "Completed")
-        dl_set(task_id, "merge", "Completed")
+        dl_set(task_id, "merge", "Running", progress=1)
         
         # 创建保存视频的目录
         save_dir = os.path.join(settings.MEDIA_ROOT, 'saved_video')
@@ -745,6 +749,14 @@ def download_youtube_video(task_id: str):
         file_exists = any(md5_value in fname for fname in existing_files)
         if file_exists:
             print("Download the same YouTube video, so skip.")
+            existing_video = Video.objects.filter(url=f"{md5_value}.mp4").first()
+            with download_status_lock:
+                task = download_status[task_id]
+                task["output_filename"] = f"{md5_value}.mp4"
+                task["thumbnail_filename"] = getattr(existing_video, 'thumbnail_url', '') if existing_video else ''
+                task["imported_video_id"] = getattr(existing_video, 'id', None) if existing_video else None
+                task["error_message"] = ""
+            dl_set(task_id, "merge", "Completed")
             return
         
         import shutil
@@ -758,20 +770,31 @@ def download_youtube_video(task_id: str):
         formatted_duration = format_duration(duration_seconds) if duration_seconds > 0 else None
         
         # 保存到Video数据库中
-        Video.objects.create(
+        video_obj = Video.objects.create(
             name=title,
             url=f"{md5_value}.mp4",
             thumbnail_url=thumbnail_filename,
             video_length=formatted_duration,
             category=None,  # 临时分类，后续可以修改
         )
+        with download_status_lock:
+            task = download_status[task_id]
+            task["output_filename"] = f"{md5_value}.mp4"
+            task["thumbnail_filename"] = thumbnail_filename
+            task["imported_video_id"] = getattr(video_obj, 'id', None)
+            task["error_message"] = ""
+        dl_set(task_id, "merge", "Completed")
+        
         print(f"YouTube video created with thumbnail: {thumbnail_filename}, duration: {formatted_duration}")
         
     except Exception as e:
         print(f"YouTube download error: {e}")
+        with download_status_lock:
+            download_status[task_id]["error_message"] = str(e)
         dl_set(task_id, "video", "Failed")
         dl_set(task_id, "audio", "Failed")
         dl_set(task_id, "merge", "Failed")
+    
     finally:
         # 清理临时工作目录
         try:
@@ -817,7 +840,7 @@ def download_bilibili_video(task_id: str):
         dl_set(task_id, "audio", "Running", progress=percent)
 
     def merge_progress_cb(percent):
-        dl_set(task_id, "merge", "Running", progress=percent)
+        dl_set(task_id, "merge", "Running", progress=min(int(percent), 99))
 
     # 1.下载视频流
     dl_set(task_id, "video", "Running")
@@ -837,47 +860,7 @@ def download_bilibili_video(task_id: str):
             os.remove(fpath)
         except OSError:
             pass
-    dl_set(task_id, "merge", "Completed")
-
-    # ④ AV1转换阶段 (部分视频下载下来是H.265，需要转化成av1以便旧浏览器兼容，该代码默认关闭)
-    # from utils.video_converter import VideoConverter
-    # converter = VideoConverter()
-    
-    # # 检查是否需要转换为AV1
-    # if converter.should_convert_to_av1(str(output_file)):
-    #     print(f"Converting {output_file} to AV1 format...")
-    #     dl_set(task_id, "convert", "Running")
-        
-    #     # 生成AV1输出文件路径
-    #     av1_output_file = str(output_file).replace('.mp4', '_av1.mp4')
-        
-    #     def conversion_progress_callback(status):
-    #         dl_set(task_id, "convert", status)
-        
-    #     # 执行AV1转换
-    #     conversion_success = converter.convert_to_av1(
-    #         str(output_file), 
-    #         av1_output_file,
-    #         progress_callback=conversion_progress_callback
-    #     )
-        
-    #     if conversion_success and os.path.exists(av1_output_file):
-    #         # 转换成功，删除原文件，使用AV1文件
-    #         try:
-    #             os.remove(output_file)
-    #             os.rename(av1_output_file, str(output_file))
-    #             print(f"AV1 conversion successful: {output_file}")
-    #             dl_set(task_id, "convert", "Completed")
-    #         except OSError as e:
-    #             print(f"Error replacing original file with AV1: {e}")
-    #             dl_set(task_id, "convert", "Failed")
-    #             # 如果替换失败，继续使用原文件
-    #     else:
-    #         print(f"AV1 conversion failed, keeping original file: {output_file}")
-    #         dl_set(task_id, "convert", "Failed")
-    #         # 转换失败但不影响整个下载流程，继续使用原文件
-    # else:
-    #     print(f"Video codec is already browser-compatible, skipping AV1 conversion")
+    dl_set(task_id, "merge", "Running")
 
     # 创建保存视频的目录
     save_dir = os.path.join(settings.MEDIA_ROOT, 'saved_video')
@@ -897,7 +880,21 @@ def download_bilibili_video(task_id: str):
     file_exists = any(md5_value in fname for fname in existing_files)
     if file_exists:
         print("Download the same file from bilibili,so raise error.")
+        existing_video = Video.objects.filter(url=f"{md5_value}.mp4").first()
+        with download_status_lock:
+            task = download_status[task_id]
+            task["output_filename"] = f"{md5_value}.mp4"
+            task["thumbnail_filename"] = getattr(existing_video, 'thumbnail_url', '') if existing_video else ''
+            task["imported_video_id"] = getattr(existing_video, 'id', None) if existing_video else None
+            task["error_message"] = ""
+        try:
+            if os.path.exists(output_file):
+                os.remove(output_file)
+        except OSError:
+            pass
+        dl_set(task_id, "merge", "Completed")
         return
+    
     import shutil
     # 移动单个文件
     print("To be moved:",file_path)
@@ -911,13 +908,21 @@ def download_bilibili_video(task_id: str):
     
     # 处理流程完成后不需要再次设置merge状态
     # 保存到Video数据库中
-    Video.objects.create(
+    video_obj = Video.objects.create(
         name=title,
         url=f"{md5_value}.mp4",
         thumbnail_url=thumbnail_filename,  # 保存缩略图文件名
         video_length=formatted_duration,   # 保存视频时长
         category=None,     # temperaryly no,Can be set later
     )
+    with download_status_lock:
+        task = download_status[task_id]
+        task["output_filename"] = f"{md5_value}.mp4"
+        task["thumbnail_filename"] = thumbnail_filename
+        task["imported_video_id"] = getattr(video_obj, 'id', None)
+        task["error_message"] = ""
+    dl_set(task_id, "merge", "Completed")
+
     print(f"Video created with thumbnail: {thumbnail_filename}, duration: {formatted_duration}")
 
 def download_podcast_audio(task_id: str):
@@ -974,8 +979,8 @@ def download_podcast_audio(task_id: str):
 
         # 跳过音频和合并阶段（因为已经是音频文件）
         dl_set(task_id, "audio", "Completed")
-        dl_set(task_id, "merge", "Completed")
-        
+        dl_set(task_id, "merge", "Running", progress=1)
+
         # 创建保存音频的目录 - 注意这里保存到 saved_audio 而不是 saved_video
         save_dir = os.path.join(settings.MEDIA_ROOT, 'saved_audio')
         os.makedirs(save_dir, exist_ok=True)
@@ -994,6 +999,14 @@ def download_podcast_audio(task_id: str):
         # 检查是否已经存在相同的文件
         if os.path.exists(file_path):
             print("Download the same podcast audio, so skip.")
+            existing_video = Video.objects.filter(url=f"{md5_value}{file_ext}").first()
+            with download_status_lock:
+                task = download_status[task_id]
+                task["output_filename"] = f"{md5_value}{file_ext}"
+                task["thumbnail_filename"] = getattr(existing_video, 'thumbnail_url', '') if existing_video else ''
+                task["imported_video_id"] = getattr(existing_video, 'id', None) if existing_video else None
+                task["error_message"] = ""
+            dl_set(task_id, "merge", "Completed")
             return
         
         # 移动文件到最终位置
@@ -1007,20 +1020,31 @@ def download_podcast_audio(task_id: str):
         formatted_duration = format_duration(duration_seconds) if duration_seconds > 0 else None
         
         # 保存到Video数据库中（复用Video模型存储音频信息）
-        Video.objects.create(
+        video_obj = Video.objects.create(
             name=title,
             url=f"{md5_value}{file_ext}",  # 保存带扩展名的文件名
             thumbnail_url=thumbnail_filename,
             video_length=formatted_duration,
             category=None,  # 使用不同的分类ID区分播客音频
         )
+        with download_status_lock:
+            task = download_status[task_id]
+            task["output_filename"] = f"{md5_value}{file_ext}"
+            task["thumbnail_filename"] = thumbnail_filename
+            task["imported_video_id"] = getattr(video_obj, 'id', None)
+            task["error_message"] = ""
+        dl_set(task_id, "merge", "Completed")
+        
         print(f"Podcast audio created with thumbnail: {thumbnail_filename}, duration: {formatted_duration}, ext: {file_ext}")
         
     except Exception as e:
         print(f"Apple Podcast download error: {e}")
+        with download_status_lock:
+            download_status[task_id]["error_message"] = str(e)
         dl_set(task_id, "video", "Failed")
         dl_set(task_id, "audio", "Failed")
         dl_set(task_id, "merge", "Failed")
+    
     finally:
         # 清理临时工作目录
         try:

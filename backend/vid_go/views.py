@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.conf import settings
 from django.views.static import serve
 import os
@@ -52,3 +52,9 @@ def frontend_assets(request, path):
     else:
         # 如果请求的资源不存在，返回 404 错误
         return HttpResponse('Asset not found', status=404)
+
+def health_check(request):
+    """
+    Health check endpoint for Electron integration
+    """
+    return JsonResponse({'status': 'ok'})

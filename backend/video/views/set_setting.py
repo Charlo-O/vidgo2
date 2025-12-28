@@ -6,11 +6,12 @@ from django.http import JsonResponse, HttpRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from openai import OpenAI
+import httpx
 import json
 from utils.wsr.transcription_engine import TranscriptionEngineFactory 
 
 
-SETTINGS_FILE = os.path.join(dj_settings.BASE_DIR, './config/config.ini')
+SETTINGS_FILE = os.path.join(dj_settings.BASE_DIR, 'config', 'config.ini')
 
 
 def _ensure_ini():
@@ -231,6 +232,9 @@ class ConfigAPIView(View):
                 elif selected_provider == 'qwen':
                     api_key = cfg.get('qwen_api_key', '')
                     base_url = cfg.get('qwen_base_url', 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+                elif selected_provider == 'modelscope':
+                    api_key = cfg.get('modelscope_api_key', '')
+                    base_url = cfg.get('modelscope_base_url', 'https://api-inference.modelscope.cn/v1')
                 else:
                     api_key = cfg.get('deepseek_api_key', '')
                     base_url = cfg.get('deepseek_base_url', 'https://api.deepseek.com')
@@ -289,13 +293,19 @@ class LLMTestAPIView(View):
     http_method_names = ['get']
 
     def get(self, request: HttpRequest, *args, **kwargs):
+        import traceback
         try:
             # Load current settings and initialize client
+            print('[LLM Test] Loading settings...')
             settings_data = load_all_settings()
             cfg = settings_data.get('DEFAULT', {})
             
+            use_proxy_raw = str(cfg.get('use_proxy', 'false'))
+            use_proxy = use_proxy_raw.strip().lower() in ('1', 'true', 'yes', 'y', 'on')
+
             # Get selected model provider
             selected_provider = cfg.get('selected_model_provider', 'deepseek')
+            print(f'[LLM Test] Selected provider: {selected_provider}')
             
             # Get provider-specific API key and base URL
             if selected_provider == 'deepseek':
@@ -314,28 +324,75 @@ class LLMTestAPIView(View):
                 api_key = cfg.get('qwen_api_key', '')
                 base_url = cfg.get('qwen_base_url', 'https://dashscope.aliyuncs.com/compatible-mode/v1')
                 model = 'qwen-plus'
+            elif selected_provider == 'modelscope':
+                api_key = cfg.get('modelscope_api_key', '')
+                base_url = cfg.get('modelscope_base_url', 'https://api-inference.modelscope.cn/v1')
+                model = cfg.get('modelscope_model', 'Qwen/Qwen2.5-72B-Instruct')
             else:
                 # Default to deepseek
                 api_key = cfg.get('deepseek_api_key', '')
                 base_url = cfg.get('deepseek_base_url', 'https://api.deepseek.com')
                 model = 'deepseek-chat'
+
+            api_key = (api_key or '').strip()
+            base_url = (base_url or '').strip().lstrip('\ufeff').rstrip('/')
+            if base_url and not (base_url.startswith('http://') or base_url.startswith('https://')):
+                base_url = f'https://{base_url}'
+
+            debug_info = {
+                'selected_provider': selected_provider,
+                'model': model,
+                'base_url_repr': repr(base_url),
+                'base_url_len': len(base_url),
+                'api_key_set': bool(api_key),
+                'use_proxy': use_proxy,
+                'proxy_env': {
+                    'HTTP_PROXY': os.environ.get('HTTP_PROXY') or os.environ.get('http_proxy'),
+                    'HTTPS_PROXY': os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy'),
+                    'ALL_PROXY': os.environ.get('ALL_PROXY') or os.environ.get('all_proxy'),
+                },
+            }
+
+            print(
+                f'[LLM Test] Using model: {model}, base_url: {base_url}, api_key: {"***" if api_key else "NOT SET"}, use_proxy: {use_proxy}'
+            )
             
             if not api_key or not base_url:
                 return JsonResponse({'success': False, 'error': f'API key or base URL not configured for provider: {selected_provider}'}, status=400)
             
-            _init_client(api_key, base_url)
+            print('[LLM Test] Creating OpenAI client locally...')
+            # Create client locally instead of using global variable
+            http_client = None
+            if not use_proxy:
+                # Avoid inheriting potentially invalid proxy env vars on Windows
+                http_client = httpx.Client(trust_env=False)
+            local_client = OpenAI(api_key=api_key, base_url=base_url, http_client=http_client)
             
             # Send test prompt
             prompt = 'Hello, please respond with "Connection successful!"'
-            print(f'Sending test prompt to model {model} at {base_url}')
-            response = client.chat.completions.create(
+            print(f'[LLM Test] Sending test prompt to model {model} at {base_url}')
+            response = local_client.chat.completions.create(
                 model=model,
                 messages=[{'role': 'user', 'content': prompt}],
                 timeout=60
             )
             content = response.choices[0].message.content
+            print(f'[LLM Test] Success! Response: {content[:100]}...')
             return JsonResponse({'success': True, 'response': content})
         except Exception as exc:
+            print(f'[LLM Test] Error: {exc}')
+            traceback.print_exc()
+            if getattr(dj_settings, 'DEBUG', False):
+                return JsonResponse(
+                    {
+                        'success': False,
+                        'error': str(exc),
+                        'error_type': type(exc).__name__,
+                        'traceback': traceback.format_exc(),
+                        'debug': debug_info if 'debug_info' in locals() else None,
+                    },
+                    status=500,
+                )
             return JsonResponse({'success': False, 'error': str(exc)}, status=500)
 
 

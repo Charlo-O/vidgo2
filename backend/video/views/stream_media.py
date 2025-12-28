@@ -46,6 +46,10 @@ def _new_download_status():
         },
         "total_progress": 0,     # 总进度百分比 (0-100)
         "finished": False,
+        "output_filename": "",
+        "thumbnail_filename": "",
+        "imported_video_id": None,
+        "error_message": "",
     }
 
 class InfoView(View):
@@ -180,28 +184,36 @@ class InfoView(View):
 
 
 from django.http import HttpResponseBadRequest
+@method_decorator(csrf_exempt, name='dispatch')
 class DownloadActionView(View):
     def dispatch(self, request, *args, **kwargs):
         self.action = kwargs.pop('action', None)
         print(self.action)
         return super().dispatch(request, *args, **kwargs)
     def post(self, request):
-        print(json.loads(request.body))
         try:
             payload = json.loads(request.body.decode('utf-8'))
         except json.JSONDecodeError:
             return HttpResponseBadRequest('Invalid JSON')
+
+        print(payload)
 
         url = payload.get('url')
         if not url:
             return JsonResponse({'error': 'Missing "url" field'}, status=400)
         if "bilibili" in url:
             bvid  = payload.get('bvid')
-            cids = payload.get('cids',"1111")
-            parts = payload.get('parts')   
+            cids = payload.get('cids')
+            parts = payload.get('parts')
             filename = payload.get('filename')
             if not bvid:
                 return HttpResponseBadRequest('Missing "bvid"')
+            if not isinstance(cids, list) or not cids:
+                return JsonResponse({'error': 'Missing or invalid "cids" field'}, status=400)
+            if not isinstance(parts, list) or len(parts) != len(cids):
+                return JsonResponse({'error': 'Missing or invalid "parts" field'}, status=400)
+            if not filename:
+                return JsonResponse({'error': 'Missing "filename" field'}, status=400)
             # 调用B站 api下载视频
             return self.enqueue_download_task(request,bvid,cids,parts,filename)
         elif "youtube" in url:
@@ -228,8 +240,10 @@ class DownloadActionView(View):
 
         # 3. 新建 task_id，并在全局状态 dict 里初始化
         task_id = int(time.time() * 1000)
+        task_ids = []
         for idx,cid in enumerate(cids,start=1):
             task_id_per_cid=str(task_id)+str(idx)
+            task_ids.append(task_id_per_cid)
             title=f"{filename}-p{idx}-{parts[idx-1]}"
             with download_status_lock:
                 download_status[task_id_per_cid] = {
@@ -243,7 +257,7 @@ class DownloadActionView(View):
 
             # 4. 推送到后台队列
             download_queue.put(task_id_per_cid)
-        return JsonResponse({"success": True})
+        return JsonResponse({"success": True, "task_id": str(task_id), "task_ids": task_ids})
 
     def enqueue_youtube_download_task(self, request, url, video_id, filename):
         """

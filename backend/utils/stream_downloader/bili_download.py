@@ -340,7 +340,7 @@ def get_direct_media_link(bvid,cid=None,title=None,idx=None,sessdata=""):
         bvid = info['bvid']
         cid = info['cid']
         title = info['title']
-    safe_title = sanitize_filename(f"{title}-{idx}")
+    safe_title = sanitize_filename(title if idx is None else f"{title}-{idx}")
     vid_json = get_video_url(bvid=bvid, cid=cid, sessdata=sessdata)
     urls = parse_video_url(vid_json)
     video  = WORK_DIR / f"{safe_title}_video.mp4"

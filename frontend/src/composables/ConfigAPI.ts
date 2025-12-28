@@ -1,7 +1,20 @@
 // 前端会编译后与后端运行在同一台主机，同一端口，所以生产中使用${window.location.port}
 // export const BACKEND = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`
-// 开发中前后端端口不统一，使用默认的8000端口
-export const BACKEND = `${window.location.protocol}//${window.location.hostname}:${import.meta.env.VITE_BACKEND_ORIGIN}`
+// 开发中前后端端口不统一，使用默认的18000端口（Electron环境）
+// Electron环境下从环境变量获取，Web环境下使用VITE_BACKEND_ORIGIN或默认18000
+const getBackendUrl = (): string => {
+  // For Electron, prefer using the same hostname as the renderer (avoids cookie domain mismatch)
+  if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    const host = window.location.hostname || '127.0.0.1'
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
+    return `${protocol}//${host}:18000`
+  }
+  // For web, use environment variable or default
+  const port = import.meta.env.VITE_BACKEND_ORIGIN || '18000';
+  return `${window.location.protocol}//${window.location.hostname}:${port}`;
+};
+
+export const BACKEND = getBackendUrl();
 
 import { getCSRFToken } from '@/composables/GetCSRFToken'
 
@@ -123,6 +136,10 @@ export interface ConfigData {
     openai_base_url: string
     qwen_api_key: string
     qwen_base_url: string
+    // ModelScope settings
+    modelscope_api_key: string
+    modelscope_base_url: string
+    modelscope_model: string
   }
   'Video watch': {
     raw_language: string
@@ -193,6 +210,10 @@ export interface FrontendSettings {
   glmBaseUrl: string
   qwenApiKey: string
   qwenBaseUrl: string
+  // ModelScope settings
+  modelscopeApiKey: string
+  modelscopeBaseUrl: string
+  modelscopeModel: string
   // Interface settings
   rawLanguage: string
   hiddenCategories: number[] // 新增：隐藏的分类ID列表
@@ -288,6 +309,10 @@ export async function loadConfig(): Promise<FrontendSettings> {
       qwenApiKey: data.DEFAULT?.qwen_api_key || '',
       qwenBaseUrl:
         data.DEFAULT?.qwen_base_url || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      // ModelScope settings
+      modelscopeApiKey: data.DEFAULT?.modelscope_api_key || '',
+      modelscopeBaseUrl: data.DEFAULT?.modelscope_base_url || 'https://api-inference.modelscope.cn/v1',
+      modelscopeModel: data.DEFAULT?.modelscope_model || 'Qwen/Qwen2.5-72B-Instruct',
       useProxy: data.DEFAULT?.use_proxy === 'true',
       // Interface settings
       rawLanguage: data['Video watch']?.raw_language || 'zh',
@@ -387,6 +412,10 @@ export async function saveConfig(settings: FrontendSettings): Promise<void> {
         glm_base_url: settings.glmBaseUrl,
         qwen_api_key: settings.qwenApiKey,
         qwen_base_url: settings.qwenBaseUrl,
+        // ModelScope settings
+        modelscope_api_key: settings.modelscopeApiKey,
+        modelscope_base_url: settings.modelscopeBaseUrl,
+        modelscope_model: settings.modelscopeModel,
         use_proxy: settings.useProxy.toString(),
       },
       'Video watch': {

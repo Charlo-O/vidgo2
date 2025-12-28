@@ -1,0 +1,49 @@
+appId: com.vidgo.app
+productName: VidGo
+copyright: Copyright © 2024
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+
+extraResources:
+  - from: ../backend-dist
+    to: backend
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - nsis
+  icon: public/icon.ico
+  artifactName: ${productName}-${version}-${arch}-setup.exe
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: true
+
+mac:
+  target:
+    - dmg
+    - zip
+  icon: public/icon.icns
+  category: public.app-category.video
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: public/icon.png
+  category: Video
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+publish:
+  provider: generic
+  url: https://your-update-server.com/releases

@@ -1,18 +1,59 @@
 import { fileURLToPath, URL } from 'node:url'
-
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import electron from 'vite-plugin-electron'
+import renderer from 'vite-plugin-electron-renderer'
+
+const isElectron = process.env.npm_lifecycle_event?.includes('electron') ||
+  process.argv.includes('--mode') && process.argv.includes('electron')
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [vue()],
-  // Configure for static file serving (Django collectstatic compatible)
-  base: '/', // Use absolute paths to work with sub-routes
+  plugins: [
+    vue(),
+    // Only include Electron plugins when building for Electron
+    ...(isElectron ? [
+      electron([
+        {
+          // Main process entry file
+          entry: 'electron/main.ts',
+          onstart(options) {
+            options.startup()
+          },
+          vite: {
+            build: {
+              outDir: 'dist-electron',
+              rollupOptions: {
+                external: ['electron'],
+              },
+            },
+          },
+        },
+        {
+          // Preload scripts
+          entry: 'electron/preload.ts',
+          onstart(options) {
+            options.reload()
+          },
+          vite: {
+            build: {
+              outDir: 'dist-electron',
+              rollupOptions: {
+                external: ['electron'],
+              },
+            },
+          },
+        },
+      ]),
+      renderer(),
+    ] : []),
+  ],
+  // Configure base path
+  base: isElectron ? './' : '/',
   build: {
-    assetsDir: 'assets', // Keep assets in assets folder
+    assetsDir: 'assets',
     rollupOptions: {
       output: {
-        // Ensure consistent file naming
         assetFileNames: 'assets/[name]-[hash][extname]',
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
@@ -23,10 +64,9 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 4173,
   },
-  // Preview server configuration (for npm run preview)
   preview: {
     host: '0.0.0.0',
-    port: 4174, // Different port for preview
+    port: 4174,
   },
   resolve: {
     alias: {

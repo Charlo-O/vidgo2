@@ -59,3 +59,4 @@ frontend/csrf_cookies.txt
 frontend/test.html
 frontend/src/assets/vjs-luxmty/fonts/
 frontend/src/shims-hls.d.ts
+backend/logs/

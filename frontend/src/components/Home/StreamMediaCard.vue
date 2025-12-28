@@ -134,7 +134,7 @@ async function confirmDownload() {
   const filename = requestVideo.value.title
   // 调用后端 ↓↓↓
   try {
-    const csrfToken = getCookie('csrftoken')
+    const csrfToken = getCookie('csrftoken') || (await getCSRFToken())
     const res = await fetch(`${BACKEND}/api/stream_media/download/add`, {
       method: 'POST',
       credentials: 'include',
@@ -150,11 +150,17 @@ async function confirmDownload() {
         filename: filename,
       }),
     })
-    const { task_id } = await res.json()
-    ElMessage.success(t('downloadTaskSubmitted', { taskId: task_id }))
+
+    if (!res.ok) {
+      throw new Error(`${res.status} ${await res.text()}`)
+    }
+
+    const data = await res.json()
+    const taskId = data?.task_id || data?.taskId
+    ElMessage.success(t('downloadTaskSubmitted', { taskId: taskId || '' }))
     selectedParts.value = [] // 清空勾选
   } catch (e) {
-    ElMessage.error(t('downloadTaskFailed'))
+    ElMessage.error(`${t('downloadTaskFailed')}：${e}`)
   }
 }
 

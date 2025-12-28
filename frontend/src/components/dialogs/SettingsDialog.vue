@@ -104,6 +104,19 @@
                 </option>
               </select>
             </div>
+            <!-- ModelScope Custom Model Input -->
+            <div v-if="settings.selectedModelProvider === 'modelscope'">
+              <label class="block text-sm font-medium text-gray-700 mb-2">模型名称</label>
+              <input
+                v-model="settings.modelscopeModel"
+                type="text"
+                class="w-full p-2 border border-gray-300 rounded-md"
+                placeholder="例如: Qwen/Qwen2.5-72B-Instruct"
+              />
+              <p class="mt-1 text-xs text-gray-500">
+                在魔搭社区模型页面获取模型名称，例如 Qwen/Qwen2.5-72B-Instruct
+              </p>
+            </div>
             <div class="flex items-center justify-between">
               <el-switch
                 v-model="settings.useProxy"
@@ -1254,6 +1267,8 @@ const currentApiKey = computed({
         return settings.glmApiKey
       case 'qwen':
         return settings.qwenApiKey
+      case 'modelscope':
+        return settings.modelscopeApiKey
       default:
         return settings.deepseekApiKey
     }
@@ -1272,6 +1287,9 @@ const currentApiKey = computed({
       case 'qwen':
         settings.qwenApiKey = value
         break
+      case 'modelscope':
+        settings.modelscopeApiKey = value
+        break
     }
   },
 })
@@ -1287,6 +1305,8 @@ const currentBaseUrl = computed({
         return settings.glmBaseUrl
       case 'qwen':
         return settings.qwenBaseUrl
+      case 'modelscope':
+        return settings.modelscopeBaseUrl
       default:
         return settings.deepseekBaseUrl
     }
@@ -1304,6 +1324,9 @@ const currentBaseUrl = computed({
         break
       case 'qwen':
         settings.qwenBaseUrl = value
+        break
+      case 'modelscope':
+        settings.modelscopeBaseUrl = value
         break
     }
   },
@@ -1424,6 +1447,7 @@ const providerOptions = [
   { label: 'OpenAI', value: 'openai' },
   { label: 'GLM', value: 'glm' },
   { label: 'Qwen', value: 'qwen' },
+  { label: '魔搭社区 (ModelScope)', value: 'modelscope' },
 ]
 
 const allTranscriptionEngines = [
@@ -1448,6 +1472,10 @@ const settings = reactive<FrontendSettings>({
   glmBaseUrl: 'https://api.deepseek.com',
   qwenApiKey: 'sk-944471ea4aef486ca2a82b2adf26c0cc',
   qwenBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  // ModelScope settings
+  modelscopeApiKey: '',
+  modelscopeBaseUrl: 'https://api-inference.modelscope.cn/v1',
+  modelscopeModel: 'Qwen/Qwen2.5-72B-Instruct',
   // Interface settings
   rawLanguage: 'zh',
   hiddenCategories: [],
