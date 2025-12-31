@@ -138,8 +138,8 @@ urlpatterns = [
     path('api/mindmap/<str:action>/<int:video_id>', MindmapActionView.as_view(), name='mindmap_action'),
 
     # 流媒体控制面板
-    path('api/stream_media/query', stream_media.InfoView.as_view(), name='query_info'),
-    path('api/stream_media/download/add', stream_media.DownloadActionView.as_view(), name='download_action'),
+    path('api/stream_media/query', csrf_exempt(stream_media.InfoView.as_view()), name='query_info'),
+    path('api/stream_media/download/add', csrf_exempt(stream_media.DownloadActionView.as_view()), name='download_action'),
     path('api/stream_media/download_status', stream_media.AllDownloadStatusView.as_view(), name='download_status'),
     path('api/stream_media/download/<str:task_id>/delete', stream_media.DeleteDownloadTaskView.as_view(), name='download-delete'),
     path('api/stream_media/download/<str:task_id>/status', stream_media.DownloadStatusView.as_view(), name='download_status'),

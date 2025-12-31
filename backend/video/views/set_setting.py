@@ -475,33 +475,55 @@ class WhisperModelAPIView(View):
             def download_model():
                 try:
                     import time
+                    import requests as req
 
                     download_progress[model_name] = 0
                     models_dir = os.path.join(dj_settings.BASE_DIR, 'models')
                     os.makedirs(models_dir, exist_ok=True)
 
-                    # Use bash script to download whisper.cpp GGML models
-                    script_path = os.path.join(dj_settings.BASE_DIR, 'scripts', 'download_whisper_models.sh')
+                    # Map model name to GGML filename
+                    model_filename_map = {
+                        'tiny': 'ggml-tiny.bin',
+                        'base': 'ggml-base.bin',
+                        'small': 'ggml-small.bin',
+                        'medium': 'ggml-medium.bin',
+                        'medium-q5': 'ggml-medium-q5_0.bin',
+                        'large-v2': 'ggml-large-v2.bin',
+                        'large-v3': 'ggml-large-v3.bin',
+                        'large-v3-q5': 'ggml-large-v3-q5_0.bin',
+                        'large-v3-turbo': 'ggml-large-v3-turbo.bin',
+                    }
 
-                    print(f"[whisper.cpp] Starting download of {model_name} using {script_path}")
+                    filename = model_filename_map.get(model_name)
+                    if not filename:
+                        print(f"[whisper.cpp] Unknown model name: {model_name}")
+                        download_progress[model_name] = -1
+                        return
 
-                    # Set WHISPER_MODEL_DIR environment variable
-                    env = os.environ.copy()
-                    env['WHISPER_MODEL_DIR'] = models_dir
+                    # Hugging Face URL for whisper.cpp GGML models
+                    base_url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+                    url = f"{base_url}/{filename}"
+                    output_path = os.path.join(models_dir, filename)
 
-                    # Execute bash script with model name as argument
-                    result = subprocess.run(
-                        ['bash', script_path, model_name],
-                        env=env,
-                        capture_output=True,
-                        text=True,
-                        check=True
-                    )
+                    print(f"[whisper.cpp] Starting download of {model_name} from {url}")
+                    print(f"[whisper.cpp] Output path: {output_path}")
 
-                    print(f"[whisper.cpp] Download output: {result.stdout}")
+                    # Download with progress tracking
+                    response = req.get(url, stream=True, timeout=30)
+                    response.raise_for_status()
 
-                    if result.stderr:
-                        print(f"[whisper.cpp] Download stderr: {result.stderr}")
+                    total_size = int(response.headers.get('content-length', 0))
+                    downloaded_size = 0
+                    chunk_size = 1024 * 1024  # 1MB chunks
+
+                    with open(output_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=chunk_size):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded_size += len(chunk)
+                                if total_size > 0:
+                                    progress = int((downloaded_size / total_size) * 100)
+                                    download_progress[model_name] = min(progress, 99)
 
                     download_progress[model_name] = 100
                     print(f"[whisper.cpp] Download completed for {model_name}")
@@ -511,14 +533,15 @@ class WhisperModelAPIView(View):
                     if model_name in download_progress:
                         del download_progress[model_name]
 
-                except subprocess.CalledProcessError as e:
-                    print(f"[whisper.cpp] Model download script failed for {model_name}: {e.stderr}")
+                except req.exceptions.RequestException as e:
+                    print(f"[whisper.cpp] Model download failed for {model_name}: {e}")
                     if model_name in download_progress:
                         download_progress[model_name] = -1  # Error state
                 except Exception as e:
                     print(f"Model download failed for {model_name}: {e}")
                     if model_name in download_progress:
                         download_progress[model_name] = -1  # Error state
+
 
             thread = threading.Thread(target=download_model)
             thread.daemon = True

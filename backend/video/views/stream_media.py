@@ -52,10 +52,8 @@ def _new_download_status():
         "error_message": "",
     }
 
+@method_decorator(csrf_exempt, name='dispatch')
 class InfoView(View):
-    def dispatch(self, request, *args, **kwargs):
-        return super().dispatch(request, *args, **kwargs)
-    @csrf_exempt
     def post(self, request):
         # 1) 先解析 JSON body获取url参数。
         try:

@@ -19,6 +19,7 @@
     "lucide-vue-next": "^0.562.0",
     "markdown-it": "^14.1.0",
     "marked": "^17.0.1",
+    "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
     "mermaid": "^11.12.2",
     "mind-elixir": "^5.3.8",
