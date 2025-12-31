@@ -132,7 +132,12 @@ VidGo 是一个面向 NAS 用户与小型团队的 **本地视频管理平台**�
 ### 系统级依赖（必须安装）
 
 - **ffmpeg**：用于音视频合并、转码、硬字幕导出等
+- **whisper.cpp**：用于本地语音转文字（已包含在 `backend/bin/whisper-cpp/`）
+  - 项目已内置 Windows x64 版本的 whisper.cpp v1.8.2
+  - 如需其他平台，请从 [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases) 下载对应版本
+  - 将二进制文件放置到 `backend/bin/whisper-cpp/main-cpu.exe`（或对应平台的可执行文件）
 -（可选）GPU / CUDA：如果使用本地 ASR 模型并需要加速
+
 
 ---
 
