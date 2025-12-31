@@ -700,10 +700,9 @@ async function checkAuthAndFetch() {
     if (response.ok) {
       const data = await response.json()
       if (data.success) {
-        // User is authenticated, fetch data
+        // User is authenticated
         isAuthenticated.value = true
         currentUser.value = data.user
-        fetchVideoData()
       } else {
         // Not authenticated
         isAuthenticated.value = false
@@ -720,7 +719,11 @@ async function checkAuthAndFetch() {
     isAuthenticated.value = false
     currentUser.value = null
   }
+  
+  // Always fetch video data regardless of authentication status
+  fetchVideoData()
 }
+
 
 // Check if root user exists
 const checkRootExists = async () => {
